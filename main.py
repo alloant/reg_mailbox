@@ -11,13 +11,20 @@ from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
 # default http port is 5000, https is 5001. 
+
+def get_ctr(folder):
+    if folder[:7] == 'Mailbox':
+        return t[8:]
+    elif folder[:10] == '8.Mailbox-':
+        return t[11:]
+
 with SynologyDrive("vInd1",PASS,"nas.prome.sg",dsm_version='7') as synd:
     tf = synd.get_teamfolder_info()
     
     year = datetime.today().strftime('%Y')
     date = datetime.today().strftime('%d/%m/%Y')
 
-    despacho = "/mydrive/despacho"
+    despacho = "/team-folders/Despacho/Inbox Despacho"
     archive = f"/team-folders/Aes Archive/ctr in {year}"
 
     wb = Workbook()
@@ -29,10 +36,11 @@ with SynologyDrive("vInd1",PASS,"nas.prome.sg",dsm_version='7') as synd:
     for t in tf:
         #if t[:7] == 'Mailbox':
         if 'Mailbox' in t:
-            ctr = t[8:]
+            ctr = get_ctr(t)
+
             mbs = synd.list_folder(f"/team-folders/{t}")
             for mb in mbs['data']['items']:
-                if f"{ctr} to cr" in mb['display_path']:
+                if mb['name'] in [f"{ctr} to cr",f"{ctr}-to-cr"]:
                     print(f"Checking {t}")
                     
                     mail = synd.list_folder(mb['display_path'])
@@ -46,7 +54,7 @@ with SynologyDrive("vInd1",PASS,"nas.prome.sg",dsm_version='7') as synd:
                         synd.move_path(note,archive)
                         
                         print("Saving link in register")
-                        p_link = synd.get_file_or_folder_info('/mydrive/archive/test.odoc')['data']['permanent_link']
+                        p_link = synd.get_file_or_folder_info(f'{archive}/{m["name"]}')['data']['permanent_link']
                         #link = f"https://nas.prome.sg:5001/oo/r/{p_link}"
                         h_link = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{m["name"]}")'
 
