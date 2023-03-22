@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "reg-mailbox"
+version = "0.1.0"
+description = ""
+authors = ["Antonio Alonso <alloant@gmail.com>"]
+readme = "README.md"
+packages = [{include = "reg_mailbox"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+synology-drive-api = "^1.0.13"
+passlib = "^1.7.4"
+openpyxl = "^3.1.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
