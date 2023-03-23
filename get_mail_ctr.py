@@ -4,13 +4,19 @@ from getpass import getpass
 from datetime import datetime
 from tempfile import NamedTemporaryFile
 
-#USER = getpass.getuser()
-PASS = getpass()
-
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-# default http port is 5000, https is 5001. 
+
+def txt2dict(file):
+    DICT = {}
+    
+    with open(file,mode='r') as inp:
+        lines = inp.read().splitlines()
+
+        DICT = {ln.split(':')[0]:ln.split(':')[1] for ln in lines if ":" in ln}
+    
+    return DICT
 
 def get_ctr(folder):
     if folder[:7] == 'Mailbox':
@@ -19,17 +25,16 @@ def get_ctr(folder):
         return t[10:]
 
 
-with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
+config = txt2dict("config.txt")
+
+
+PASS = getpass()
+
+with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
     tf = synd.get_teamfolder_info()
     
     year = datetime.today().strftime('%Y')
     date = datetime.today().strftime('%d/%m/%Y')
-
-    despacho = "/team-folders/Despacho/Inbox Despacho"
-    archive = f"/team-folders/Aes Archive/ctr in {year}"
-
-    #despacho = "/mydrive/despacho"
-    #archive = "/mydrive/archive"
 
     wb = Workbook()
     ws = wb.active
@@ -39,7 +44,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
     cont = 0
     
     for t in tf:
-        if 'Mailbox gul' in t:
+        if 'Mailbox' in t:
             ctr = get_ctr(t)
             
             try:
@@ -52,7 +57,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
                 if mb['name'] in [f"{ctr} to cr",f"{ctr}-to-cr"]:
                     print(f"Checking {t}")
                     p_path = synd.get_file_or_folder_info(f"{mb['display_path']}")['data']['permanent_link']
-                    h_path = f'=HYPERLINK("#dlink=/oo/r/{p_path}", "{mb["name"]}")'
+                    h_path = f'=HYPERLINK("#dlink=/d/f/{p_path}", "{mb["name"]}")'
  
                     try:
                         mail = synd.list_folder(mb['display_path'])
@@ -67,7 +72,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
                         
 
                         try:
-                            synd.copy(note,f"{despacho}/{m['name']}")
+                            synd.copy(note,f"{config['despacho']}/{m['name']}")
                         except:
                             print("Cannot copy files")
                             ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
@@ -77,7 +82,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
                         
                         
                         try:
-                            synd.move_path(note,archive)
+                            synd.move_path(note,config['archive'])
                         except:
                             print(f"Cannot move {m['name']}")
                             ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
@@ -87,7 +92,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
 
 
                         try:
-                            p_link = synd.get_file_or_folder_info(f'{archive}/{m["name"]}')['data']['permanent_link']
+                            p_link = synd.get_file_or_folder_info(f'{config["archive"]}/{m["name"]}')['data']['permanent_link']
                             h_link = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{m["name"]}")'
                         except:
                             print("Cannot get link")
@@ -101,7 +106,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
         file = NamedTemporaryFile()
         wb.save(file)
         file.seek(0)
-        file.name = f"{date.replace('/','-')}-reg.xlsx"
+        file.name = f"{date.replace('/','-')}-ctr-incoming.xlsx"
     
         print("Creating register file")
         uploaded = True
@@ -109,7 +114,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
             ret_upload = synd.upload_file(file, dest_folder_path='/mydrive')
         except:
             print("Cannot upload register")
-            wb.save(f"{date.replace('/','-')}-reg.xlsx")
+            wb.save(f"{date.replace('/','-')}-ctr-incoming.xlsx")
             uploaded = False
 
         if uploaded:
@@ -119,3 +124,7 @@ with SynologyDrive("df-scr",PASS,"nas.prome.sg",dsm_version='7') as synd:
                     conflict_action='autorename')
             except:
                 print("Cannot convert file to Synology Office")
+
+    input("Pulse Enter to continue")
+    #os.system("pause")
+
