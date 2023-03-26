@@ -7,133 +7,96 @@ from tempfile import NamedTemporaryFile
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-
-def txt2dict(file):
-    DICT = {}
-    
-    with open(file,mode='r') as inp:
-        lines = inp.read().splitlines()
-
-        DICT = {ln.split(':')[0]:ln.split(':')[1] for ln in lines if ":" in ln}
-    
-    return DICT
+from syno_tools import txt2dict, get_link, copy_to, move_to
 
 def get_ctr(folder):
     if folder[:7] == 'Mailbox':
-        return t[8:]
+        return folder[8:]
     elif folder[:10] == '8.Mailbox-':
-        return t[10:]
+        return folder[10:]
 
 
 config = txt2dict("config.txt")
-
-
+year = datetime.today().strftime('%Y')
+date_normal = datetime.today().strftime('%d-%m-%Y')
+date = datetime.today().toordinal() - 693594
 PASS = getpass()
 
 with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-    tf = synd.get_teamfolder_info()
-    
-    year = datetime.today().strftime('%Y')
-    date = datetime.today().strftime('%d/%m/%Y')
-
     wb = Workbook()
     ws = wb.active
-
-    ws.append(['ctr','No','Year','Ref','Date','Content','Dept','#of docs'])
+    ws.append(['source','No','Year','Ref','Date','Content','Dept','#of docs'])
    
     cont = 0
     
-    for t in tf:
-        if 'Mailbox' in t:
-            ctr = get_ctr(t)
+    team_folders = synd.get_teamfolder_info()
+    team_selected = []
+
+    for team in team_folders:
+        if 'Mailbox gul' in team:
+            ctr = get_ctr(team)
+            if team[0] != '8':
+                source = f"/team-folders/{team}/{ctr} to cr"
+            else:
+                source = f"/team-folders/{team}/{ctr}-to-cr"
+            dest = f"{config['archive']}/ctr in 2023"
+        
+            team_selected.append({'name':team,'source':source,'dest':dest,'source_name':ctr})
+
+    team_selected.append({'name':'Mail asr','source':'/team-folders/Mail asr/Mail from asr','dest':f'{config["archive"]}/sf in {year}','source_name':'asr'})
+    team_selected.append({'name':'Mail cg','source':'/team-folders/Mail cg and r/Mail from cg','dest':f'{config["archive"]}/cg in {year}','source_name':'cg'})
+    team_selected.append({'name':'Mail r','source':'/team-folders/Mail cg and r/Mail from r','dest':f'{config["archive"]}/r in {year}','source_name':''})
+
+
+    for team in team_selected:
+        print(f"Checking {team['name']}")
             
-            try:
-                mbs = synd.list_folder(f"/team-folders/{t}")
-            except:
-                print(f'Cannot get folders from {t}')
-                break
-            
-            # Cheking all folders
-            for mb in mbs['data']['items']:
-                if mb['name'] in [f"{ctr} to cr",f"{ctr}-to-cr"]:
-                    print(f"Checking {t}")
-                    p_path = synd.get_file_or_folder_info(f"{mb['display_path']}")['data']['permanent_link']
-                    h_path = f'=HYPERLINK("#dlink=/d/f/{p_path}", "{mb["name"]}")'
- 
-                    try:
-                        mail = synd.list_folder(mb['display_path'])
-                    except:
-                        print(f"Cannot get file list from {mb['name']}")
-                    
+        # Getting notes from ctr to cr in t  ##############################
+        try:
+            team_data = synd.get_file_or_folder_info(team['source'])['data']
+            syn_notes = synd.list_folder(team['source'])['data']
+                
+            notes = syn_notes['items']
+            team_link = get_link(team_data)
+        except:
+            print(f'Cannot get notes from {team["name"]}')
+            continue
 
-                    # Checking files inside folder
-                    error = False
-                    for m in mail['data']['items']:
-                        cont += 1
-                        note = f"{mb['display_path']}/{m['name']}"
-                        
-                        print(f"    Copying {m['name']} to despacho")
-                        copy_way = 'normal'
-                        try:
-                            synd.copy(note,f"{config['despacho']}/{m['name']}")
-                        except:
-                            try:
-                                tmp_file = synd.download_file(note)
-                                ret_upload = synd.upload_file(tmp_file, dest_folder_path=f"{config['despacho']}")
-                                
-                                """
-                                try:
-                                    if 'docx' in m['name'] or 'xlsx' in m['name']:
-                                        ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
-                                            delete_original_file=False,
-                                            conflict_action='autorename')
-                                """
-                                copy_way = 'download'
-                            except:
-                                print("Cannot copy files")
-                                if not error:
-                                    ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
-                                    error = True
-                                continue
-                            
-                        
-                        print(f"    Moving {m['name']} to archive")
-                        try:
-                            synd.move_path(note,f"{config['archive']}/ctr in {year}")
-                        except:
-                            print(f"Cannot move {m['name']}")
-                            if not error:
-                                ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
-                                error = True
-                            continue
-                            
+        # Cheking all notes ########################################
+        error = False
+        for note in notes:
+            cont += 1
 
-                        print("    Saving link in register")
+            ctr = team['source_name']
+            if ctr == '':
+                ctr = note['name'].split('.')[0]
 
-                        try:
-                            tmp_data = synd.get_file_or_folder_info(f'{config["archive"]}/ctr in {year}/{m["name"]}')['data']
-                            p_link = tmp_data['permanent_link']
-                            
-                            if copy_way == 'normal':
-                                h_link = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{m["name"]}")'
-                            else:
-                                h_link = f'=HYPERLINK("#dlink=/d/f/{p_link}", "{m["name"]}")'
+            # First copy note to Despacho
+            if not copy_to(synd,note,config['despacho'],convert=False):
+                if not error:
+                    ws.append([ctr,team_link,year,'',date,f"ERROR in {team_data['display_path']}",'',''])
+                    error = True
+                continue
 
-                        except:
-                            print("Cannot get link")
-                            if not error:
-                                ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
-                                error = True
-                            continue
-                        
-                        ws.append([ctr,h_link,year,'',date,'','',''])
+            print(f"Moving {note['name']} to archive")
+            rst,links = move_to(synd,note,f"{team['dest']}",team_data,convert=False)
 
+            if not rst:
+                print(f"Cannot move {note['name']}")
+                if not error:
+                    ws.append([ctr,team_link,year,'',date,f"ERROR in {team_data['display_path']}",'',''])
+                    error = True
+                continue
+                
+            for ln in links:
+                ws.append([ctr,ln,year,'',date,'','',''])
+    
     
     if cont > 0:
         file = NamedTemporaryFile()
         wb.save(file)
         file.seek(0)
-        file.name = f"{date.replace('/','-')}-ctr-incoming.xlsx"
+        file.name = f"{date_normal}-ctr-incoming.xlsx"
     
         print("Creating register file")
         uploaded = True
@@ -141,7 +104,7 @@ with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
             ret_upload = synd.upload_file(file, dest_folder_path='/mydrive')
         except:
             print("Cannot upload register")
-            wb.save(f"{date.replace('/','-')}-ctr-incoming.xlsx")
+            wb.save(f"{date_normal}-ctr-incoming.xlsx")
             uploaded = False
 
         if uploaded:
@@ -154,4 +117,3 @@ with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
 
     input("Pulse Enter to continue")
     #os.system("pause")
-
