@@ -1,5 +1,9 @@
 # Personal data
 config.txt
+config_df.txt
+ctrs.txt
+groups.txt
+output.xlsx
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

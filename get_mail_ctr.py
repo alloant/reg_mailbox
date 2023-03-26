@@ -52,7 +52,8 @@ with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
             except:
                 print(f'Cannot get folders from {t}')
                 break
-
+            
+            # Cheking all folders
             for mb in mbs['data']['items']:
                 if mb['name'] in [f"{ctr} to cr",f"{ctr}-to-cr"]:
                     print(f"Checking {t}")
@@ -64,41 +65,67 @@ with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
                     except:
                         print(f"Cannot get file list from {mb['name']}")
                     
+
+                    # Checking files inside folder
+                    error = False
                     for m in mail['data']['items']:
                         cont += 1
                         note = f"{mb['display_path']}/{m['name']}"
                         
                         print(f"    Copying {m['name']} to despacho")
-                        
-
+                        copy_way = 'normal'
                         try:
                             synd.copy(note,f"{config['despacho']}/{m['name']}")
                         except:
-                            print("Cannot copy files")
-                            ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
-                            break
+                            try:
+                                tmp_file = synd.download_file(note)
+                                ret_upload = synd.upload_file(tmp_file, dest_folder_path=f"{config['despacho']}")
+                                
+                                """
+                                try:
+                                    if 'docx' in m['name'] or 'xlsx' in m['name']:
+                                        ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
+                                            delete_original_file=False,
+                                            conflict_action='autorename')
+                                """
+                                copy_way = 'download'
+                            except:
+                                print("Cannot copy files")
+                                if not error:
+                                    ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
+                                    error = True
+                                continue
+                            
                         
-                        print("    Moving {m['name']} to archive")
-                        
-                        
+                        print(f"    Moving {m['name']} to archive")
                         try:
-                            synd.move_path(note,config['archive'])
+                            synd.move_path(note,f"{config['archive']}/ctr in {year}")
                         except:
                             print(f"Cannot move {m['name']}")
-                            ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
-                            break
+                            if not error:
+                                ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
+                                error = True
+                            continue
+                            
 
                         print("    Saving link in register")
 
-
                         try:
-                            p_link = synd.get_file_or_folder_info(f'{config["archive"]}/{m["name"]}')['data']['permanent_link']
-                            h_link = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{m["name"]}")'
+                            tmp_data = synd.get_file_or_folder_info(f'{config["archive"]}/ctr in {year}/{m["name"]}')['data']
+                            p_link = tmp_data['permanent_link']
+                            
+                            if copy_way == 'normal':
+                                h_link = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{m["name"]}")'
+                            else:
+                                h_link = f'=HYPERLINK("#dlink=/d/f/{p_link}", "{m["name"]}")'
+
                         except:
                             print("Cannot get link")
-                            h_link = h_path
+                            if not error:
+                                ws.append([ctr,h_path,year,'',date,f"ERROR in {mb['display_path']}",'',''])
+                                error = True
+                            continue
                         
-
                         ws.append([ctr,h_link,year,'',date,'','',''])
 
     
