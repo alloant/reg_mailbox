@@ -11,6 +11,9 @@ import ast
 import pickle
 
 from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment
+
 from synology_drive_api.drive import SynologyDrive
 
 from syno_tools import txt2dict, copy_to, move_to, convert_to, EXT
@@ -65,14 +68,14 @@ def get_notes_in_folders(PASS):
         for folder in team_folders:
             mail_folder,key,team = folder_in_teams(f"/team-folders/{folder}",team_config)
             
-            if mail_folder: # and key == 'gul':
+            if mail_folder:# and key == 'gul':
                 # Cheking all notes ########################################
                 print(f"Checking folder {team['folder']}")
                 try:
                     notes = synd.list_folder(team['folder'])['data']['items']
                     for note in notes:
                         print(f"    ->Found note {note['name']}")
-                        reg_notes[note['name']] = team|{'source':key,'converted':False,'original':''}
+                        reg_notes[note['name']] = team.copy()|{'source':key,'converted':False,'original':''}
                 except:
                     print(f'Cannot get notes from {team["folder"]}')
                     continue
@@ -84,9 +87,12 @@ def create_register(ws,reg_notes):
     ws.append(['type','source','No','Year','Ref','Date','Content','Dept','Name','Original'])
     
     for name,note in reg_notes.items():
-        num = re.findall('\d+',name)
-        num = f"000{num[0]}"[-4:] if num else ''
-        if num and note['type'] == 'ctr in': num = num[1:]
+        num = re.findall('\d+',name.replace(note['source'],''))
+        num = num[0] if num else ''
+        
+        #num = f"000{num[0]}"[-4:] if num else ''
+        #if num and note['type'] == 'ctr in': num = num[1:]
+        
         note['num'] = num
 
         note['year'] = year
@@ -103,6 +109,14 @@ def create_register(ws,reg_notes):
         ws[ws.max_row][5].value = datetime.today()
         ws[ws.max_row][5].number_format = 'dd/mm/yyyy;@'
 
+        column_widths = [10,10,10,10,12,12,50,12,20,20]
+        for i, column_width in enumerate(column_widths,1):  # ,1 to start at 1
+            ws.column_dimensions[get_column_letter(i)].width = column_width
+
+        for row in ws[1:ws.max_row]:  # skip the header
+            for i,col in enumerate(column_widths):
+                cell = row[i]             # column H
+                cell.alignment = Alignment(horizontal='center')
 
 def change_names(PASS,notes):
     config = txt2dict("config.txt")
@@ -184,36 +198,37 @@ def copy_to_despacho(PASS,notes):
 
 def upload_register(PASS,wb):
     config = txt2dict("config.txt")
-    date = datetime.today().strftime('%d-%m-%Y')
+    date = datetime.today().strftime('%Y-%m-%d')
+    hour = datetime.today().strftime('%HH-%Mm')
     
     with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         file = NamedTemporaryFile()
         wb.save(file)
         file.seek(0)
-        file.name = f"{date}-ctr-incoming.xlsx"
+        file.name = f"despacho-{date}-{hour}.xlsx"
     
         print("Creating register file")
         uploaded = True
         
         try:
-            ret_upload = synd.upload_file(file, dest_folder_path=f"{config['despacho']}/Outbox Despacho")
+            ret_upload = synd.upload_file(file, dest_folder_path=f"{config['despacho']}/Inbox Despacho")
         except:
             print("Cannot upload register")
-            wb.save(f"{date}-ctr-incoming.xlsx")
+            wb.save(f"despacho-{date}-{hour}.xlsx")
             uploaded = False
 
         if uploaded:
             try:
                 ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
-                    delete_original_file=True,
+                    delete_original_file=False,
                     conflict_action='autorename')
             except:
                 print("Cannot convert file to Synology Office")
 
-        return True
+            return True
     
     print("Cannot upload register")
-    wb.save(f"{date}-ctr-incoming.xlsx")
+    wb.save(f"despacho-{date}-{hour}.xlsx")
 
 
 
@@ -222,7 +237,7 @@ def main():
     PASS = getpass()
     
     reg_notes = get_notes_in_folders(PASS)
-    #input("go") 
+    input("go") 
     if reg_notes != {}:
         wb = Workbook()
         ws = wb.active

@@ -43,7 +43,7 @@ def get_notes_in_folders(PASS):
 
 def create_register(ws,reg_notes):
     year = datetime.today().strftime('%Y')
-    ws.append(['type','source','No','Year','Ref','Date','Content','Dept','Name','Original'])
+    ws.append(['type','dr','No','Year','Ref','Date','Content','Dept','link','Original'])
     
     for name,note in reg_notes.items():
         num = re.findall('\d+',name)
@@ -133,7 +133,7 @@ def convert_files(PASS,notes):
 
 def upload_register(PASS,wb):
     config = txt2dict("config.txt")
-    date = datetime.today().strftime('%d-%m-%Y')
+    date = datetime.today().strftime('%d-%m-%Y-%HH-%mm')
     
     with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         file = NamedTemporaryFile()
@@ -148,7 +148,7 @@ def upload_register(PASS,wb):
             ret_upload = synd.upload_file(file, dest_folder_path=f"/mydrive/ToSend")
         except:
             print("Cannot upload register")
-            wb.save(f"{date}-ctr-incoming.xlsx")
+            wb.save(f"from_dr-{date}.xlsx")
             uploaded = False
 
         if uploaded:
@@ -162,7 +162,7 @@ def upload_register(PASS,wb):
         return True
     
     print("Cannot upload register")
-    wb.save(f"{date}-ctr-incoming.xlsx")
+    wb.save(f"from_dr-{date}.xlsx")
 
 
 
@@ -171,7 +171,7 @@ def main():
     PASS = getpass()
     
     reg_notes = get_notes_in_folders(PASS)
-    #input("go") 
+    input("go") 
     if reg_notes != {}:
         wb = Workbook()
         ws = wb.active

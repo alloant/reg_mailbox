@@ -49,6 +49,7 @@ def move_to(synd,file_path,dest):
 
         return file_id,permanent_link
     except:
+        print('Cannot move')
         return '',''
 
 def convert_to(synd,file_path,delete = False):
@@ -94,6 +95,7 @@ def copy_to(synd,file_path,dest):
             tmp_file = synd.download_file(file_path)
             rst = synd.upload_file(tmp_file,dest_folder_path=dest)
     except:
+        raise
         print("ERROR: Cannot copy the file")
         error = True
 
