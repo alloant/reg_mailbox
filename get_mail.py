@@ -237,7 +237,7 @@ def main():
     PASS = getpass()
     
     reg_notes = get_notes_in_folders(PASS)
-    input("go") 
+    #input("go") 
     if reg_notes != {}:
         wb = Workbook()
         ws = wb.active

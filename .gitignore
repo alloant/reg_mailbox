@@ -4,6 +4,7 @@ config_df.txt
 ctrs.txt
 groups.txt
 output.xlsx
+deps
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
