@@ -69,7 +69,6 @@ def get_notes_in_folders(PASS):
             mail_folder,key,team = folder_in_teams(f"/team-folders/{folder}",team_config)
             
             if mail_folder:# and key == 'gul':
-                # Cheking all notes ########################################
                 print(f"Checking folder {team['folder']}")
                 try:
                     notes = synd.list_folder(team['folder'])['data']['items']
@@ -86,7 +85,7 @@ def create_register(ws,reg_notes):
     year = datetime.today().strftime('%Y')
     ws.append(['type','source','No','Year','Ref','Date','Content','Dept','Name','Original'])
     
-    for name,note in reg_notes.items():
+    for name,note in dict(sorted(reg_notes.items())).items():
         num = re.findall('\d+',name.replace(note['source'],''))
         num = num[0] if num else ''
         
@@ -131,8 +130,8 @@ def change_names(PASS,notes):
                 new_names.append([new_name,name])
                 synd.rename_path(new_name,f"{note['folder']}/{name}")
                 
-            except:
-                print(f"ERROR: Cannot change name of {name}")
+            except Exception as err:
+                print(f"ERROR Cannot change name of {name}: {err}")
 
         for new in new_names:
             notes[new[0]] = notes.pop(new[1])
