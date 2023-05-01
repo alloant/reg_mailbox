@@ -7,6 +7,8 @@ from PySide6.QtCore import QSettings
 
 _ROOT = os.path.abspath(os.path.dirname(__file__))
 
+EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
+
 SETTINGS = QSettings("synochat","config")
 
 if not str(SETTINGS.fileName()).endswith('.conf'): # We are on Windows probably

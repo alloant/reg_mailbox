@@ -1,6 +1,0 @@
-repos:
-  - repo: https://github.com/christopherpickering/pre-commit-hooks
-    rev: v1.0.1
-    hooks:
-      - id: poetry-to-requirements
-        args: [--dev,--output=subfolder/requirements.txt]

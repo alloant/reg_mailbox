@@ -17,8 +17,8 @@ from openpyxl.styles import Alignment, Font
 from synochat.webhooks import IncomingWebhook
 from synology_drive_api.drive import SynologyDrive
 
-from synomail.syno_tools import copy_to, move_to, convert_to, EXT
-from synomail import CONFIG
+from synomail.syno_tools import move_to, convert_to
+from synomail import CONFIG, EXT
 
 TITLES = ['type','source','No','Year','Ref','Date','Content','Dept','Name','Original','Comments'] 
 
@@ -122,21 +122,21 @@ def archive_notes(PASS,reg_notes):
                 else:
                     name = note['Name'][:-2].split('","')[1]
             
-                f_id,p_link = move_to(synd,f"{path}/{name}",dest)
+                move_to(synd,f"{path}/{name}",dest)
+                
                 if not note['Original'] in ['',None]:
                     org_name = rename_note(synd,note['Original'],path,num)
                     move_to(synd,f"{path}/{org_name}",dest)
      
-            if data['create_folder']: p_link = path_link
-
             src = re.findall('\d+',num)
             only_num = int(src[0]) if src else num
             if data['create_folder']:
-                data['link'] = f'=HYPERLINK("#dlink=/d/f/{p_link}", "{only_num}")'
-                data['link_dep'] = f'<https://nas.prome.sg:5001/d/f/{p_link}|{name} {only_num}>'
+                data['link'] = f'=HYPERLINK("#dlink=/d/f/{path_link}", "{only_num}")'
+                data['link_dep'] = f'<https://nas.prome.sg:5001/d/f/{path_link}|{name}>'
             else:
+                p_link = note['Name'][:-2].split('","')[0].split("/")[-1]
                 data['link'] = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{only_num}")'
-                data['link_dep'] = f'<https://nas.prome.sg:5001/oo/r/{p_link}|{name} {only_num}>'
+                data['link_dep'] = f'<https://nas.prome.sg:5001/oo/r/{p_link}|{name}>'
 
 
 def upload_register(PASS,wb):

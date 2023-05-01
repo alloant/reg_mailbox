@@ -14,20 +14,7 @@ import pickle
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-from synomail import CONFIG, GROUPS
-
-EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
-
-
-def txt2dict(file):
-    DICT = {}
-    
-    with open(file,mode='r') as inp:
-        lines = inp.read().splitlines()
-
-        DICT = {ln.split(':',1)[0]:ln.split(':',1)[1] for ln in lines if ":" in ln}
-    
-    return DICT
+from synomail import CONFIG, GROUPS, EXT
 
 
 def copy_to(synd,file_path,dest):
@@ -37,19 +24,19 @@ def copy_to(synd,file_path,dest):
 
         if ext in EXT.values():
             rst = synd.copy(file_path,f"{dest}/{name}")
-            print(f"Copied file {name} to {dest}")
+            logging.debug(f"Copied file {name} to {dest}")
         else:
             tmp_file = synd.download_file(file_path)
             rst = synd.upload_file(tmp_file,dest_folder_path=dest)
     except:
-        print("ERROR: Cannot copy the file {name} to {dest}")
+        logging.error(f"Cannot copy the file {name} to {dest}")
 
 def move_to(synd,file_path,dest):
-    print(f"Moving {file_path}...")        
+    logging.debug(f"Moving {file_path}...")        
     try:
         rst = synd.move_path(file_path,dest)
     except:
-        print("Cannot move")
+        logging.error(f"Cannot move {file_path}")
 
 
 def change_names(PASS):
@@ -57,16 +44,17 @@ def change_names(PASS):
         for group,ctrs in GROUPS.items():
             try:
                 notes = synd.list_folder(f"/mydrive/ToSend/{group}")['data']['items']
-            except:
+            except Exception as err:
+                logging.warning(err)
                 continue
 
             for note in notes:
                 try:
                     if note['name'][0].isdigit():
                         synd.rename_path(f"cr{note['name']}",f"{note['display_path']}")
-                except:
-                    raise
-                    print("Cannot rename")
+                except Exception as err:
+                    logging.error(err)
+                    logging.error(f"Cannot rename note['name']")
 
 
 
@@ -75,7 +63,8 @@ def send_to_all(PASS):
         for group,ctrs in GROUPS.items():
             try:
                 notes = synd.list_folder(f"/mydrive/ToSend/{group}")['data']['items']
-            except:
+            except Exception as err:
+                logging.error(err)
                 continue
 
             for note in notes:

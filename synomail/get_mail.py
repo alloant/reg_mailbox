@@ -19,8 +19,10 @@ from openpyxl.styles import Alignment
 
 from synology_drive_api.drive import SynologyDrive
 
-from synomail import CONFIG
-from .syno_tools import copy_to, move_to, convert_to, EXT
+from synomail import CONFIG, EXT
+from synomail.syno_tools import move_to, convert_to
+
+
 
 def folder_in_teams(folder,teams):
     fds = folder.split("/")[1:]
@@ -66,8 +68,9 @@ def get_notes_in_folders(PASS):
                     notes = synd.list_folder(team['folder'])['data']['items']
                     for note in notes:
                         logging.info(f"Found note {note['name']} in {team['folder']}")
-                        reg_notes[note['name']] = team.copy()|{'source':key,'converted':False,'original':''}
-                except:
+                        reg_notes[note['name']] = team.copy()|{'source':key,'converted':False,'original':'','p_link':note['permanent_link']}
+                except Exception as err:
+                    logging.error(err)
                     logging.error(f'Cannot get notes from {team["folder"]}')
                     continue
 
@@ -118,7 +121,6 @@ def create_register(ws,reg_notes):
                 cell.alignment = Alignment(horizontal='center')
 
 def change_names(PASS,notes):
-
     with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         new_names = []
         for name,note in notes.items():
@@ -128,12 +130,13 @@ def change_names(PASS,notes):
                 #new_name = new_name.replace(' ','_')
                 new_names.append([new_name,name])
                 synd.rename_path(new_name,f"{note['folder']}/{name}")
-                
             except Exception as err:
-                logging.error(f"ERROR Cannot change name of {name}: {err}")
+                logging.error(err)
+                logging.warning(f"Cannot change name of {name}")
 
         for new in new_names:
             notes[new[0]] = notes.pop(new[1])
+
 
 def move_to_despacho(PASS,notes):
     with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
@@ -142,17 +145,17 @@ def move_to_despacho(PASS,notes):
                 ext = Path(name).suffix[1:]
                 name_link = name
                 
-                f_id,p_link = move_to(synd,f"{note['folder']}/{name}",f"{CONFIG['despacho']}/Inbox Despacho")
+                move_to(synd,f"{note['folder']}/{name}",f"{CONFIG['despacho']}/Inbox Despacho")
+                
                 note['folder'] = f"{CONFIG['despacho']}/Inbox Despacho"
 
-                chain = 'd/f'
-                if ext in EXT.values():
-                    chain = 'oo/r'
-
+                chain = 'oo/r' if ext in EXT.values() else 'd/f'
+                
+                p_link = note['p_link']
                 link = f'=HYPERLINK("#dlink=/{chain}/{p_link}", "{name_link}")' if p_link != '' else name_link
                 note['link'] = link
-            except:
-                logging.error(f"Cannot move {name}")
+            except Exception as err:
+                logging.error(err)
 
 
 def convert_files(PASS,notes):
@@ -166,15 +169,15 @@ def convert_files(PASS,notes):
                 ext = Path(name).suffix[1:]
                 if ext in EXT:
                     f_path,f_id,p_link = convert_to(synd,f"{CONFIG['despacho']}/Inbox Despacho/{name}")
-                    #note['converted'] = True
+                    
                     note['original'] = name
                     new_name = f"{name[:-len(ext)]}{EXT[ext]}"
                     new_names.append([new_name,name])
                     if p_link != '':
                         note['link'] = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{new_name}")'
 
-            except:
-                logging.error(f"Cannot convert {name}")
+            except Exception as err:
+                logging.error(err)
 
         for new in new_names:
             notes[new[0]] = notes.pop(new[1])
@@ -196,7 +199,8 @@ def upload_register(PASS,wb):
         
         try:
             ret_upload = synd.upload_file(file, dest_folder_path=f"{CONFIG['despacho']}/Inbox Despacho")
-        except:
+        except Exception as err:
+            logging.error(err)
             logging.error("Cannot upload register")
             wb.save(f"despacho-{date}-{hour}.xlsx")
             uploaded = False
@@ -206,8 +210,9 @@ def upload_register(PASS,wb):
                 ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
                     delete_original_file=False,
                     conflict_action='autorename')
-            except:
-                logging.error("Cannot convert file to Synology Office")
+            except Exception as err:
+                logging.error(err)
+                logging.warning("Cannot convert register to Synology Office")
 
             return True
     
@@ -226,7 +231,6 @@ def init_get_mail(PASS):
             change_names(PASS,reg_notes)
             move_to_despacho(PASS,reg_notes)
             convert_files(PASS,reg_notes)
-            #copy_to_despacho(PASS,reg_notes)
             create_register(ws,reg_notes)
             upload_register(PASS,wb)
         except:

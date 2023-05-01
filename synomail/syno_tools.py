@@ -6,12 +6,12 @@ from tempfile import NamedTemporaryFile
 from pathlib import Path
 import time
 
+import logging
+
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-
-EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
-
+from synomail import EXT
 
 def build_link(p_link,name_link,is_folder = False):
     if is_folder:
@@ -23,7 +23,7 @@ def build_link(p_link,name_link,is_folder = False):
 
 
 def move_to(synd,file_path,dest):
-    print(f"Moving {file_path}...")        
+    logging.debug(f"Moving {file_path}...")        
     try:
         rst = synd.move_path(file_path,dest)
         task_id = rst['data']['async_task_id']
@@ -31,42 +31,35 @@ def move_to(synd,file_path,dest):
         rst = synd.get_task_status(task_id)
         
         while(rst['data']['result'][0]['data']['progress'] < 100 or rst['data']['has_fail']):
+            time.sleep(0.2)
             rst = synd.get_task_status(task_id)
-    
-        print('Done')
-        
+
         rst_data = rst['data']['result'][0]['data']['result']
         
-        if 'targets' in rst_data:
-            file_id = rst_data['targets'][0]['file_id']
-            permanent_link = rst_data['targets'][0]['permanent_link']
-        else:
-            print('Cannot move the file')
-            file_id = ''
-            permanent_link = ''
+        if not 'targets' in rst_data:
+            logging.error('Synology cannot move the file {file_path}')
 
-        return file_id,permanent_link
-    except:
-        print('Cannot move the file')
-        return '',''
+    except Exception as err:
+        logging.error(err)
+        logging.warning('Cannot move the file {file_path}')
+
 
 def convert_to(synd,file_path,delete = False):
-    print(f"Converting {file_path}...")        
+    logging.info(f"Converting {file_path}...")        
     try:
         rst = synd.convert_to_online_office(file_path,delete_original_file=delete)
         task_id = rst['data']['async_task_id']
     
         rst = synd.get_task_status(task_id)
-    except:
+        while(not rst['data']['has_fail'] and rst['data']['result'][0]['data']['status'] == 'in_progress'):
+            rst = synd.get_task_status(task_id)
+        
+    except Exception as err:
+        logging.error(err)
+        logging.warning(f'Cannot convert {file_path}')
         return '','',''
    
-    while(not rst['data']['has_fail'] and rst['data']['result'][0]['data']['status'] == 'in_progress'):
-        #print(".",end='')
-        rst = synd.get_task_status(task_id)
-    
-    #time.sleep(10) 
-    print('Done')
-    
+        
     ext = Path(file_path).suffix[1:]
     name = file_path.replace(ext,EXT[ext])
     

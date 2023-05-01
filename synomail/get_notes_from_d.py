@@ -15,8 +15,8 @@ import pickle
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-from synomail.syno_tools import copy_to, move_to, convert_to, build_link, EXT
-from synomail import CONFIG
+from synomail.syno_tools import move_to, convert_to, build_link
+from synomail import CONFIG, EXT
 
 def get_notes_in_folders(PASS):
     with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd: 
@@ -34,8 +34,9 @@ def get_notes_in_folders(PASS):
                         notes = synd.list_folder(f"/team-folders/{folder}/Outbox {key}")['data']['items']
                         for note in notes:
                             logging.info(f"Found note {note['name']} in {folder}")
-                            reg_notes[note['name']] = note|{'source':key,'converted':False,'original':''}
-                    except:
+                            reg_notes[note['name']] = note|{'source':key,'converted':False,'original':'','p_link':note['permanent_link']}
+                    except Exception as err:
+                        logging.error(err)
                         logging.error(f'Cannot get notes from {folder}')
                         continue
 
@@ -90,14 +91,16 @@ def move_to_ToSend(PASS,notes):
             logging.debug(f"Note {name}")
             try:
                 name_link = name
-                f_id,p_link = move_to(synd,f"{note['display_path']}",f"/mydrive/ToSend")
+                move_to(synd,f"{note['display_path']}",f"/mydrive/ToSend")
+                
                 note['folder'] = f"/mydrive/ToSend"
                 ext = Path(name).suffix[1:]
                 if ext in EXT.values():
-                    note['link'] = build_link(p_link,name_link)
+                    note['link'] = build_link(note['p_link'],name_link)
                 else:
-                    note['link'] = build_link(p_link,name_link,True)
-            except:
+                    note['link'] = build_link(note['p_link'],name_link,True)
+            except Exception as err:
+                logging.error(err)
                 logging.error(f"Cannot move {name}")
 
 
@@ -162,7 +165,7 @@ def upload_register(PASS,wb):
 def init_get_notes_from_d(PASS):
     logging.info('Starting getting notes from d')
     reg_notes = get_notes_in_folders(PASS)
-    """ 
+     
     if reg_notes != {}:
         wb = Workbook()
         ws = wb.active
@@ -176,7 +179,7 @@ def init_get_notes_from_d(PASS):
         except:
             create_register(ws,reg_notes)
             upload_register(PASS,wb)
-    """
+    
     logging.info('Finishing getting notes from d')
 
 def main():
