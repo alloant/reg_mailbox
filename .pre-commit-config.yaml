@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/christopherpickering/pre-commit-hooks
-    rev: <VERSION> # Get the latest from: https://github.com/christopherpickering/pre-commit-hooks/releases
+    rev: v1.0.1
     hooks:
       - id: poetry-to-requirements
         args: [--dev,--output=subfolder/requirements.txt]
