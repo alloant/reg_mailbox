@@ -8,30 +8,27 @@ import re
 from pathlib import Path
 import ast
 
+import logging
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
 
+from synochat.webhooks import IncomingWebhook
 from synology_drive_api.drive import SynologyDrive
 
-from syno_tools import txt2dict, copy_to, move_to, convert_to, EXT
+from synomail.syno_tools import copy_to, move_to, convert_to, EXT
+from synomail import CONFIG
 
-TO_ARCHIVE = "Outbox Despacho/to_archive"
-
-TITLES = ['type','source','No','Year','Ref','Date','Content','Dept','Name','Original'] 
+TITLES = ['type','source','No','Year','Ref','Date','Content','Dept','Name','Original','Comments'] 
 
 def read_register(PASS):
-    config = txt2dict("config.txt")
-    
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-        register = synd.list_folder(f"{config['despacho']}/Outbox Despacho")['data']['items']
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+        register = synd.list_folder(f"{CONFIG['despacho']}/Outbox Despacho")['data']['items']
         pattern = re.compile("despacho-(\d\d-\d\d-\d\d\d\d)-(\d\dH-\d\dm).osheet")
         notes = {}
         
         for reg in register:
-            #print(reg["name"],re.match(pattern,reg["name"]))
-            #if re.match(pattern,reg["name"]):
             if reg["name"][:9] == "despacho-" and 'osheet' in reg['name']:
                 try:
                     reg_file = synd.download_file(reg['display_path'])
@@ -63,7 +60,7 @@ def read_register(PASS):
 
                                 notes[f"{temp['source']}_{temp['No']}"]['notes'].append(temp.copy())
                 except:
-                    print(f"Cannot download {note['name']}")
+                    logging.error(f"Cannot download {note['name']}")
                     continue
 
         return notes
@@ -88,7 +85,7 @@ def create_folder(synd,data,dest,num):
 
             return dest,p_link
         except:
-            print(f"Cannot create folder {num}")
+            logging.error(f"Cannot create folder {num}")
             return '',''
     else:
         return dest,''
@@ -102,22 +99,21 @@ def rename_note(synd,note_name,path,num):
             synd.rename_path(f"{num}.{ext}",f"{path}/{name}")
             name = f"{num}.{ext}"
         except:
-            print("Cannot change the name")
+            logging.error("Cannot change the name")
         
         return name
 
         
 def archive_notes(PASS,reg_notes):
-    config = txt2dict("config.txt")
-    path = f"{config['despacho']}/{TO_ARCHIVE}"
+    path = f"{CONFIG['despacho']}/Outbox Despacho"
     
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         for num,data in reg_notes.items():
             if data['Dept'] in [None,'']:
                 data['link'] = ''
                 continue
 
-            dest = f"{config['archive']}/{data['type']} in {data['Year']}"
+            dest = f"{CONFIG['archive']}/{data['type']} in {data['Year']}"
             dest,path_link = create_folder(synd,data,dest,num)
             
             for note in data['notes']:
@@ -137,58 +133,28 @@ def archive_notes(PASS,reg_notes):
             only_num = int(src[0]) if src else num
             if data['create_folder']:
                 data['link'] = f'=HYPERLINK("#dlink=/d/f/{p_link}", "{only_num}")'
+                data['link_dep'] = f'<https://nas.prome.sg:5001/d/f/{p_link}|{name} {only_num}>'
             else:
                 data['link'] = f'=HYPERLINK("#dlink=/oo/r/{p_link}", "{only_num}")'
-
-def dept_notes(PASS,reg_notes):
-    config = txt2dict("config.txt")
-    path = f"{config['despacho']}/Outbox Despacho"
-    deps = {d.lower():d for d in config['deps'].split(",")}
-    
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-        for num,data in reg_notes.items():
-            if data['Dept'] in ['',None]:
-                continue
-
-            dest = "/team-folders/Mail {0}/Inbox {0}"
-                
-            dests = []
-            for dep in data['Dept'].split(","):
-                dp = dep.strip().lower() if dep != '' else ''
-                if dp != '' and dp in deps.keys():
-                    dests.append(dest.format(deps[dp]))
-                
-            for note in data['notes']:
-                if note['main']:
-                    name = rename_note(synd,note['Name'][:-2].split('","')[1],path,num)
-                else:
-                    name = note['Name'][:-2].split('","')[1]
-                
-                for dest in dests:
-                    des,p_link = create_folder(synd,data,dest,num)
-                    if dest == dests[-1]:
-                        move_to(synd,f"{path}/{name}",des)
-                    else:
-                        copy_to(synd,f"{path}/{name}",des)
+                data['link_dep'] = f'<https://nas.prome.sg:5001/oo/r/{p_link}|{name} {only_num}>'
 
 
 def upload_register(PASS,wb):
-    config = txt2dict("config.txt")
-    date = datetime.today().strftime('%d-%m-%Y-%HH-%Mm')
+    date = datetime.today().strftime('%Y-%m-%d-%HH-%Mm')
     
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         file = NamedTemporaryFile()
         wb.save(file)
         file.seek(0)
         file.name = f"register-{date}.xlsx"
     
-        print("Creating register file")
+        logging.info("Creating register file")
         uploaded = True
         
         try:
-            ret_upload = synd.upload_file(file, dest_folder_path=f"{config['despacho']}/Outbox Despacho")
+            ret_upload = synd.upload_file(file, dest_folder_path=f"{CONFIG['despacho']}/Outbox Despacho")
         except:
-            print("Cannot upload register")
+            logging.error("Cannot upload register")
             wb.save(f"register-{date}.xlsx")
             uploaded = False
 
@@ -198,11 +164,11 @@ def upload_register(PASS,wb):
                     delete_original_file=False,
                     conflict_action='autorename')
             except:
-                print("Cannot convert file to Synology Office")
+                logging.error("Cannot convert file to Synology Office")
 
         return True
     
-    print("Cannot upload register")
+    logging.error("Cannot upload register")
     wb.save(f"register-{date}.xlsx")
 
 
@@ -210,7 +176,24 @@ def create_register(ws,reg_notes):
     reg_titles = ['source','link','Year','Ref','Date','Content','Dept','of_anex']
     ws.append(reg_titles)
 
-    for num,data in dict(sorted(reg_notes.items())).items():
+    font = Font(name= 'Arial',
+                size=12,
+                bold=True,
+                italic=False,
+                strike=False,
+                underline='none'
+                #color='4472C4'
+                )
+
+    #for num,data in dict(sorted(reg_notes.items())).items():
+    #if 'No' in reg_notes:
+    #    ord_notes = dict(sorted(reg_notes.items(), key=lambda item: item[1]['No']))
+    #if 'source' in reg_notes:
+    #    ord_notes = dict(sorted(ord_notes.items(), key=lambda item: item[1]['source']))
+    #if 'type' in reg_notes:
+    #    ord_notes = dict(sorted(ord_notes.items(), key=lambda item: item[1]['type']))
+
+    for num,data in reg_notes.items():
         if data['Dept'] in ['',None]:
             continue
 
@@ -234,6 +217,7 @@ def create_register(ws,reg_notes):
             for i,col in enumerate(column_widths):
                 cell = row[i]             # column H
                 cell.alignment = Alignment(horizontal='center')
+                cell.font = font
 
 def fill_data(reg_notes):
     not_to_reg = ['Name','Original']
@@ -257,27 +241,38 @@ def fill_data(reg_notes):
 
         data['create_folder'] = create_folder
                 
-            
 
-
-def main():
-    PASS = getpass()
+def send_messages(reg_notes):
+    tokens = ast.literal_eval(CONFIG['tokens'])
     
+    for num,data in reg_notes.items():
+        deps = [dp.lower() for dp in data['Dept'].split(',')]
+        
+        message = f"*{data['Dept']}* {data['link_dep']} `{data['Content']}` `{data['Comments']}` "
+        for dep in deps:
+            webhook = IncomingWebhook('nas.prome.sg', tokens[dep], port=5001)
+            webhook.send(message)
+
+def init_register_despacho(PASS):
+    logging.info('Starting register despacho')
     reg_notes = read_register(PASS)
 
     if reg_notes != {}:
         fill_data(reg_notes)
         
-        #input("asd")
-
         archive_notes(PASS,reg_notes)
-        dept_notes(PASS,reg_notes)
+        send_messages(reg_notes)
         
         wb = Workbook()
         ws = wb.active
         create_register(ws,reg_notes)
         upload_register(PASS,wb)
 
+    logging.info('Finishing register despacho')
+
+def main():
+    PASS = getpass()
+    init_register_despacho(PASS)
     
     input("Pulse Enter to continue")
 

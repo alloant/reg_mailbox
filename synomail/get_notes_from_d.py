@@ -8,18 +8,18 @@ import re
 from pathlib import Path
 import ast
 
+import logging
+
 import pickle
 
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-from syno_tools import txt2dict, copy_to, move_to, convert_to, build_link, EXT
-
+from synomail.syno_tools import copy_to, move_to, convert_to, build_link, EXT
+from synomail import CONFIG
 
 def get_notes_in_folders(PASS):
-    config = txt2dict("config.txt")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd: 
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd: 
         team_folders = synd.get_teamfolder_info()
 
         reg_notes = {}
@@ -29,14 +29,14 @@ def get_notes_in_folders(PASS):
             
                 # Cheking all notes ########################################
                 if not key in ['asr','cg','r','ctr','vc']:
-                    print(f"Checking folder {folder}")
+                    logging.debug(f"Checking folder {folder}")
                     try:
                         notes = synd.list_folder(f"/team-folders/{folder}/Outbox {key}")['data']['items']
                         for note in notes:
-                            print(f"    ->Found note {note['name']}")
+                            logging.info(f"Found note {note['name']} in {folder}")
                             reg_notes[note['name']] = note|{'source':key,'converted':False,'original':''}
                     except:
-                        print(f'Cannot get notes from {folder}')
+                        logging.error(f'Cannot get notes from {folder}')
                         continue
 
         return reg_notes
@@ -67,9 +67,7 @@ def create_register(ws,reg_notes):
 
 
 def change_names(PASS,notes):
-    config = txt2dict("config.txt")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         new_names = []
         for name,note in notes.items():
             try:
@@ -79,20 +77,17 @@ def change_names(PASS,notes):
                 if name != new_name:
                     new_names.append([new_name,name])
                     synd.rename_path(new_name,f"{note['display_path']}")
-                    print(f"Name change from {name} to {new_name}") 
+                    logging.info(f"Name change from {name} to {new_name}") 
             except:
-                print(f"ERROR: Cannot change name of {name}")
+                logging.error(f"ERROR: Cannot change name of {name}")
 
         for new in new_names:
             notes[new[0]] = notes.pop(new[1])
 
 def move_to_ToSend(PASS,notes):
-    config = txt2dict("config.txt")
-    print("Moving")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         for name,note in notes.items():
-            print(f"Note {name}")
+            logging.debug(f"Note {name}")
             try:
                 name_link = name
                 f_id,p_link = move_to(synd,f"{note['display_path']}",f"/mydrive/ToSend")
@@ -103,13 +98,11 @@ def move_to_ToSend(PASS,notes):
                 else:
                     note['link'] = build_link(p_link,name_link,True)
             except:
-                print(f"Cannot move {name}")
+                logging.error(f"Cannot move {name}")
 
 
 def convert_files(PASS,notes):
-    config = txt2dict("config.txt")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         new_names = []
         for name,note in notes.items():
             try:
@@ -124,7 +117,7 @@ def convert_files(PASS,notes):
                     note['link'] = build_link(p_link,name_link)
                     new_names.append([f"{name[:-len(ext)]}{EXT[ext]}",name])
             except:
-                print(f"Cannot convert {name}")
+                logging.error(f"Cannot convert {name}")
 
         for new in new_names:
             notes[new[0]] = notes.pop(new[1])
@@ -132,22 +125,21 @@ def convert_files(PASS,notes):
 
 
 def upload_register(PASS,wb):
-    config = txt2dict("config.txt")
     date = datetime.today().strftime('%d-%m-%Y-%HH-%mm')
     
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
         file = NamedTemporaryFile()
         wb.save(file)
         file.seek(0)
-        file.name = f"{date}-ctr-incoming.xlsx"
+        file.name = f"from_dr-{date}.xlsx"
     
-        print("Creating register file")
+        logging.info("Creating register file")
         uploaded = True
         
         try:
             ret_upload = synd.upload_file(file, dest_folder_path=f"/mydrive/ToSend")
         except:
-            print("Cannot upload register")
+            logging.error("Cannot upload register")
             wb.save(f"from_dr-{date}.xlsx")
             uploaded = False
 
@@ -157,21 +149,20 @@ def upload_register(PASS,wb):
                     delete_original_file=True,
                     conflict_action='autorename')
             except:
-                print("Cannot convert file to Synology Office")
+                logging.error("Cannot convert file to Synology Office")
 
         return True
     
-    print("Cannot upload register")
+    logging.error("Cannot upload register")
     wb.save(f"from_dr-{date}.xlsx")
 
 
 
 
-def main():
-    PASS = getpass()
-    
+def init_get_notes_from_d(PASS):
+    logging.info('Starting getting notes from d')
     reg_notes = get_notes_in_folders(PASS)
-    input("go") 
+    """ 
     if reg_notes != {}:
         wb = Workbook()
         ws = wb.active
@@ -185,10 +176,13 @@ def main():
         except:
             create_register(ws,reg_notes)
             upload_register(PASS,wb)
-    
+    """
+    logging.info('Finishing getting notes from d')
+
+def main():
+    PASS = getpass()
+    init_get_notes_from_d(PASS)
     input("Pulse Enter to continue")
-
-
 
 if __name__ == '__main__':
     main()

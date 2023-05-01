@@ -7,10 +7,14 @@ import time
 import re
 from pathlib import Path
 
+import logging
+
 import pickle
 
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
+
+from synomail import CONFIG, GROUPS
 
 EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
 
@@ -49,11 +53,8 @@ def move_to(synd,file_path,dest):
 
 
 def change_names(PASS):
-    config = txt2dict("config.txt")
-    groups = txt2dict("groups.txt")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-        for group,ctrs in groups.items():
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+        for group,ctrs in GROUPS.items():
             try:
                 notes = synd.list_folder(f"/mydrive/ToSend/{group}")['data']['items']
             except:
@@ -70,11 +71,8 @@ def change_names(PASS):
 
 
 def send_to_all(PASS):
-    config = txt2dict("config.txt")
-    groups = txt2dict("groups.txt")
-
-    with SynologyDrive(config['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-        for group,ctrs in groups.items():
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
+        for group,ctrs in GROUPS.items():
             try:
                 notes = synd.list_folder(f"/mydrive/ToSend/{group}")['data']['items']
             except:
@@ -88,15 +86,15 @@ def send_to_all(PASS):
                         copy_to(synd,note['display_path'],f"/team-folders/Mailbox {ctr}/cr to {ctr}")
                     
 
-
+def init_send_mail(PASS):
+    logging.info('Starting to send mail to ctr')
+    change_names(PASS)
+    send_to_all(PASS)
+    logging.info('Finish to send mail to ctr')
 
 def main():
     PASS = getpass()
-
-    change_names(PASS)
-   
-    send_to_all(PASS)
-
+    init_send_mail(PASS)     
     input("Done")
 
 if __name__ == '__main__':

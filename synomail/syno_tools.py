@@ -12,15 +12,6 @@ from synology_drive_api.drive import SynologyDrive
 
 EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
 
-def txt2dict(file):
-    DICT = {}
-    
-    with open(file,mode='r') as inp:
-        lines = inp.read().splitlines()
-
-        DICT = {ln.split(':',1)[0]:ln.split(':',1)[1] for ln in lines if ":" in ln}
-    
-    return DICT
 
 def build_link(p_link,name_link,is_folder = False):
     if is_folder:
@@ -43,13 +34,20 @@ def move_to(synd,file_path,dest):
             rst = synd.get_task_status(task_id)
     
         print('Done')
-
-        file_id = rst['data']['result'][0]['data']['result']['targets'][0]['file_id']
-        permanent_link = rst['data']['result'][0]['data']['result']['targets'][0]['permanent_link']
+        
+        rst_data = rst['data']['result'][0]['data']['result']
+        
+        if 'targets' in rst_data:
+            file_id = rst_data['targets'][0]['file_id']
+            permanent_link = rst_data['targets'][0]['permanent_link']
+        else:
+            print('Cannot move the file')
+            file_id = ''
+            permanent_link = ''
 
         return file_id,permanent_link
     except:
-        print('Cannot move')
+        print('Cannot move the file')
         return '',''
 
 def convert_to(synd,file_path,delete = False):
@@ -60,8 +58,7 @@ def convert_to(synd,file_path,delete = False):
     
         rst = synd.get_task_status(task_id)
     except:
-        raise
-        return '',''
+        return '','',''
    
     while(not rst['data']['has_fail'] and rst['data']['result'][0]['data']['status'] == 'in_progress'):
         #print(".",end='')
@@ -95,7 +92,6 @@ def copy_to(synd,file_path,dest):
             tmp_file = synd.download_file(file_path)
             rst = synd.upload_file(tmp_file,dest_folder_path=dest)
     except:
-        raise
         print("ERROR: Cannot copy the file")
         error = True
 
