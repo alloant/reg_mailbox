@@ -123,7 +123,7 @@ class mainWindow(QMainWindow, QPlainTextEdit):
         logging.warning('that\'s not right')
         logging.error('foobar')
 
-def main():
+def main_ui():
     app = QApplication(sys.argv)
     #settings = QSettings("alloant","quotes")
 
@@ -135,5 +135,3 @@ def main():
     
     sys.exit(app.exec())
 
-if __name__ == '__main__':
-    main()

@@ -2,17 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import os
-from PySide6.QtCore import QSettings
+#from PySide6.QtCore import QSettings
 
 
 _ROOT = os.path.abspath(os.path.dirname(__file__))
 
 EXT = {'xls':'osheet','xlsx':'osheet','docx':'odoc'}
 
-SETTINGS = QSettings("synochat","config")
+#SETTINGS = QSettings("synochat","config")
 
-if not str(SETTINGS.fileName()).endswith('.conf'): # We are on Windows probably
-	SETTINGS = QSettings(QSettings.IniFormat, QSettings.UserScope,'synomail', 'config')
+#if not str(SETTINGS.fileName()).endswith('.conf'): # We are on Windows probably
+#	SETTINGS = QSettings(QSettings.IniFormat, QSettings.UserScope,'synomail', 'config')
 
 
 def txt2dict(file):

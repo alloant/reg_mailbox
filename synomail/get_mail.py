@@ -23,7 +23,6 @@ from synomail import CONFIG, EXT
 from synomail.syno_tools import move_to, convert_to
 
 
-
 def folder_in_teams(folder,teams):
     fds = folder.split("/")[1:]
     for team in teams:
@@ -62,7 +61,7 @@ def get_notes_in_folders(PASS):
         for folder in team_folders:
             mail_folder,key,team = folder_in_teams(f"/team-folders/{folder}",team_config)
             
-            if mail_folder and key == 'gul':
+            if mail_folder: # and key == 'gul':
                 logging.debug(f"Checking folder {team['folder']}")
                 try:
                     notes = synd.list_folder(team['folder'])['data']['items']
