@@ -8,10 +8,12 @@ import time
 
 import logging
 
+from synology_drive_api.drive import SynologyDrive
+
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-from synomail import EXT
+from synomail import EXT, INV_EXT, CONFIG
 
 def build_link(p_link,name_link,is_folder = False):
     if is_folder:
@@ -21,27 +23,32 @@ def build_link(p_link,name_link,is_folder = False):
 
     return f'=HYPERLINK("#dlink=/{chain}/{p_link}", "{name_link}")' if p_link != '' else name_link
 
-
 def move_to(synd,file_path,dest):
-    logging.debug(f"Moving {file_path}...")        
+    logging.debug(f"Moving {file_path} to {dest}")        
     try:
+        logging.debug(f'Sending synology command to move {file_path}')
         rst = synd.move_path(file_path,dest)
+        logging.debug('Command to move sent')
+
         task_id = rst['data']['async_task_id']
-    
+        
+        logging.debug("Waiting for synology to move")
         rst = synd.get_task_status(task_id)
         
         while(rst['data']['result'][0]['data']['progress'] < 100 or rst['data']['has_fail']):
             time.sleep(0.2)
             rst = synd.get_task_status(task_id)
 
+        logging.debug("{file_path was move}")
+
         rst_data = rst['data']['result'][0]['data']['result']
         
         if not 'targets' in rst_data:
-            logging.error('Synology cannot move the file {file_path}')
+            logging.error(f'Synology cannot move the file {file_path} to {dest}')
 
     except Exception as err:
         logging.error(err)
-        logging.warning('Cannot move the file {file_path}')
+        logging.warning(f'Cannot move the file {file_path}')
 
 
 def convert_to(synd,file_path,delete = False):
@@ -52,6 +59,7 @@ def convert_to(synd,file_path,delete = False):
     
         rst = synd.get_task_status(task_id)
         while(not rst['data']['has_fail'] and rst['data']['result'][0]['data']['status'] == 'in_progress'):
+            time.sleep(1)
             rst = synd.get_task_status(task_id)
         
     except Exception as err:
@@ -70,6 +78,61 @@ def convert_to(synd,file_path,delete = False):
 
     return file_path,file_id,permanent_link
 
+
+def download_file(synd,file_path,dest):
+    logging.debug(f"Downloading {file_path}")
+    try:
+        ext = Path(file_path).suffix[1:]
+        if ext in INV_EXT:
+            ext = INV_EXT[ext]
+            bio = synd.download_synology_office_file(file_path)
+        else:
+            bio = synd.download_file(file_path)
+
+        file_name = Path(file_path).stem
+            
+        with open(f'{dest}/{file_name}.{ext}','wb') as f:
+            f.write(bio.read())
+        
+    except Exception as err:
+        logging.error(err)
+        logging.error(f"Cannot upload {file_path}")
+
+
+def upload_file(PASS,file,dest):
+    with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd: 
+        logging.debug(f"Uploading {file.name}")
+        try:
+            ret_upload = synd.upload_file(file, dest_folder_path=dest)
+        except Exception as err:
+            logging.error(err)
+            logging.error("Cannot upload {file.name}")
+
+
+def upload_convert_wb(synd,wb,name,dest):
+    file = NamedTemporaryFile()
+    wb.save(file)
+    file.seek(0)
+    file.name = name
+
+    try:
+        logging.debug(f"Uploading {file}")
+        ret_upload = synd.upload_file(file, dest_folder_path=dest)
+        uploaded = True
+    except Exception as err:
+        logging.error(err)
+        logging.error("Cannot upload register")
+        wb.save(file.name)
+        uploaded = False
+
+    if uploaded:
+        try:
+            ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
+            delete_original_file=False,
+            conflict_action='autorename')
+        except Exception as err:
+            logging.error(err)
+            logging.warning("Cannot convert register to Synology Office")
 
 
 def copy_to(synd,file_path,dest):

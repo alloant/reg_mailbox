@@ -15,7 +15,7 @@ import pickle
 from openpyxl import Workbook
 from synology_drive_api.drive import SynologyDrive
 
-from synomail.syno_tools import move_to, convert_to, build_link
+from synomail.syno_tools import move_to, convert_to, build_link, upload_convert_wb
 from synomail import CONFIG, EXT
 
 def get_notes_in_folders(PASS):
@@ -131,35 +131,9 @@ def upload_register(PASS,wb):
     date = datetime.today().strftime('%d-%m-%Y-%HH-%mm')
     
     with SynologyDrive(CONFIG['user'],PASS,"nas.prome.sg",dsm_version='7') as synd:
-        file = NamedTemporaryFile()
-        wb.save(file)
-        file.seek(0)
-        file.name = f"from_dr-{date}.xlsx"
+        name = f"from_dr-{date}.xlsx"
     
-        logging.info("Creating register file")
-        uploaded = True
-        
-        try:
-            ret_upload = synd.upload_file(file, dest_folder_path=f"/mydrive/ToSend")
-        except:
-            logging.error("Cannot upload register")
-            wb.save(f"from_dr-{date}.xlsx")
-            uploaded = False
-
-        if uploaded:
-            try:
-                ret_convert = synd.convert_to_online_office(ret_upload['data']['display_path'],
-                    delete_original_file=True,
-                    conflict_action='autorename')
-            except:
-                logging.error("Cannot convert file to Synology Office")
-
-        return True
-    
-    logging.error("Cannot upload register")
-    wb.save(f"from_dr-{date}.xlsx")
-
-
+        upload_convert_wb(synd,wb,name,f"/mydrive/ToSend") 
 
 
 def init_get_notes_from_d(PASS):
